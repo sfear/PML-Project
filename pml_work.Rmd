@@ -1,0 +1,74 @@
+---
+title: "Practical Machine Learning Course Projecy"
+author: "Shawn"
+date: '2015-02-20'
+output: html_document
+---
+
+The goal of this project is to use machine learning techniques to predict the actions of individuals by using data recorded on those individuals.
+
+The data we are going to use for this project was collected by people wearing accelerometers on thier belt, forearm, arm, and the dumbell that they are moving. The participants in described by the data performed barbell lifts in one of 5 different ways, and now using the accelerometer data we must predict which way the exercise was preformed.
+
+```{r}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+
+dim(training)
+```
+
+As you can see there are 159 predictor variables, so lets try and remove some of those variables with common sense before trying to compress this data set any further.
+
+```{r}
+head(training[1:5,16:20])
+```
+There are some variables that are mostly composed of blank spots or NA values, and so these are all removed. See the pml_work.Rmd file to read the code on how this was done.
+
+```{r}
+u <- is.na(training)
+x <-0
+for(i in 1:160){
+  if(sum(u[,i])/19622 < .9){
+    x <- c(x,i)
+    }
+  }
+x <- x[2:length(x)]
+training2 <- training[x]
+#The data set is now down to 93 variables. Time to remove all of the black factor columns.
+u <- training2[1,] == ""
+training2 <- training2[,!u]
+#Down to 60 variables.
+training2 <- training2[,3:60] #Get rid of name and row number.
+training2 <- training2[6:58] #Get rid of the time sstamp data
+```
+After getting rid of all of the blank and NA data along with the names of the participants and the row numbers, we have a data set with 52 predictor variables. This edited data set is called "training2"
+
+With over 19000 data points and 52 predictors we have a lot of data to predict 5 outcomes. Given the size of the data set and the relative small output range it was decided that the best model to train would not be a more "accurate/heavy duty" but slower model like random forests, and so lets try a simpler but faster and easier to interpret model like the decision tree or a model based predictor.
+
+Using all of the 52 predictors as is gives us at best about 50% estimated out of sample accuracy using a descision tree and 70% estimated out of same accuracy using lda.
+
+PCA was used to reduce the size of the data set
+```{r}
+library(caret)
+preProc <- preProcess(training2[,-53],method="pca")
+trainPC <- predict(preProc, training2[,-53])
+preProc
+``` 
+
+But when this dataset was used to train a tree or lda the accuracy more or less stayed the same. So boosting with trees was tried:
+
+```{r,eval=FALSE}
+#eval = FALSE because this model takes a long time to train (15ish mins). If you want to run this code just take the eval = FALSE statement out and then knit the Rmd file.
+modFit_gbm <- train(training2$classe~.,method="gbm",verbose=F,data=training2, trControl = trainControl(method="cv",number=10))
+
+modFit_gbm
+```
+
+Using 10-fold cross validation the out of sample accuracy is estimated to be 0.963. This model took a little bit of time to train, but it's accuracy is much better. So I used this model to predict on the testing set:
+
+```{r,eval=FALSE}
+pred <- predict(modFit_gbm,testing)
+```
+The results were:
+
+> B A B A A E D B A A B C B A E E A B B B
+
